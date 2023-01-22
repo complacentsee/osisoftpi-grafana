@@ -6,6 +6,7 @@
   "metrics": true,
   "annotations": true,
   "alerting": false,
+  "streaming": true,
   "info": {
     "description": "Datasource plugin for OSIsoft PI Web API",
     "author": {
@@ -33,7 +34,7 @@
     ],
     "screenshots": [],
     "version": "3.0.0",
-    "updated": "2022-09-02"
+    "updated": "2023-01-22"
   },
   "dependencies": {
     "grafanaDependency": ">=8.4.0",

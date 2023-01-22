@@ -6,12 +6,16 @@ import {
   DataSourceApi,
   DataSourceInstanceSettings,
   AnnotationEvent,
-  toDataFrame,
   MetricFindValue,
+  CircularDataFrame,
+  LoadingState,
+  FieldType,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData } from './types';
+
+import { Observable, merge } from 'rxjs';
 
 interface PiwebapiElementPath {
   path: string;
@@ -27,6 +31,7 @@ interface PiwebapiInternalRsp {
 interface PiwebapTargetRsp {
   refId: string;
   target: string;
+  WebId?: string;
   datapoints: any[];
 }
 
@@ -222,38 +227,74 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     return options;
   }
 
-  /**
-   * Datasource Implementation. Primary entry point for data source.
-   * This takes the panel configuration and queries, sends them to PI Web API and parses the response.
-   *
-   * @param {any} options - Grafana query and panel options.
-   * @returns - Promise of data in the format for Grafana panels.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  async query(options: DataQueryRequest<PIWebAPIQuery>): Promise<DataQueryResponse> {
+
+  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
     var ds = this;
     var query = this.buildQueryParameters(options);
     query.targets = filter(query.targets, (t) => !t.hide);
-
-    if (query.targets.length <= 0) {
-      return Promise.resolve({ data: [] });
-    } else {
-      return Promise.all(ds.getStream(query)).then((targetResponses) => {
-        let flattened: PiwebapTargetRsp[] = [];
-        each(targetResponses, (tr) => {
-          each(tr, (item) => flattened.push(item));
-        });
-        const response: DataQueryResponse = {
-          data: flattened
-            .sort((a, b) => {
-              return +(a.target > b.target) || +(a.target === b.target) - 1;
-            })
-            .map((d) => toDataFrame(d)),
-        };
-        return response;
-      });
+    var maxPointCapacity = 1000;
+    if(query.maxDataPoints){
+      maxPointCapacity = query.maxDataPoints
     }
+
+    //fixme make this fail gracefully for query's with no length
+
+    const observables = ds.getStream(query).map((targetResponse) => {
+      return new Observable<DataQueryResponse>((subscriber) => {
+
+        targetResponse.then((targetResponse) => {
+          const frame = new CircularDataFrame({
+            append: 'tail',
+            capacity: maxPointCapacity,
+          });
+
+          each(targetResponse, (item) => {
+            frame.refId = item.refId
+            frame.name = item.target
+
+            //FIXME: add support for other types
+            frame.addField({ name: 'time', type: FieldType.time});
+            frame.addField({ name: 'value', type: FieldType.number});        
+
+            if(item.WebId && this.piwebapiurl){
+              let address = this.piwebapiurl.replace(/(^\w+:|^)\/\//, '');
+              //Note: This only works as a browser side, not as a server side
+              address= 'ws://' + address +  '/streams/' + item.WebId + '/channel?includeInitialValues=true'
+              const connection = new WebSocket(address);
+
+              connection.onerror = (error: any) => {
+                console.log(`WebSocket error: ${JSON.stringify(error)}`);
+              };
+
+              connection.onmessage = (event: any) => {
+                let eventobject = JSON.parse(event.data);
+                let timestamp = eventobject.Items[0].Items[0].Timestamp;
+                let date = new Date(timestamp);
+                let unixTimestamp = date.getTime();
+                let value = eventobject.Items[0].Items[0].Value;
+                frame.add({time: unixTimestamp, value: value});
+
+                subscriber.next({
+                  data: [frame],
+                  state: LoadingState.Streaming,
+                });
+              };
+            }
+
+            each(item.datapoints, datapoint => {
+              frame.add({time: datapoint[1], value: datapoint[0]});
+            })
+          });
+
+          subscriber.next({ 
+            data: [frame],
+            state: LoadingState.Streaming,
+           });
+        });
+      }
+        )
+    });
+    return merge(...observables);
   }
 
   /**
@@ -632,6 +673,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         innerResults.push({
           refId: target.refId,
           target: name + '[' + key + ']',
+          WebId: content.WebId,
           datapoints: api.parsePiPointValueList(value, target, isSummary),
         });
       });
@@ -641,6 +683,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       {
         refId: target.refId,
         target: name,
+        WebId: content.WebId,
         datapoints: api.parsePiPointValueList(content.Items, target, isSummary),
       },
     ];
@@ -816,13 +859,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = ds
           .restGetWebId(target.elementPath, target.isPiPoint)
-          .then((datarsp) =>
+          .then((datarsp) => 
             ds.getAttributes(datarsp.WebId!, {
               searchFullHierarchy: 'true',
               nameFilter: '*',
             })
           )
-          .then((datarspa) =>
+          .then((datarspa) => 
             datarspa.filter(
               (d) =>
                 target.attributes.indexOf(d.Name) >= 0 ||
@@ -884,17 +927,23 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .then((response: any) => {
           const targetResults: any[] = [];
           each(response.data, (value, key) => {
+            const webID = webidresponse[parseInt(key, 10) - 1].WebId;
             if (target.expression) {
               const attribute = webidresponse[parseInt(key, 10) - 1].Name;
               each(
                 ds.processResults(value.Content, target, displayName || attribute || targetName, noTemplate),
-                (targetResult) => targetResults.push(targetResult)
+                (targetResult) => {
+                  targetResult.WebId = webID;
+                  targetResults.push(targetResult)}
               );
             } else {
               each(value.Content.Items, (item) => {
                 each(
                   ds.processResults(item, target, displayName || item.Name || targetName, noTemplate),
-                  (targetResult) => targetResults.push(targetResult)
+                  (targetResult) => {
+                    targetResult.WebId = webID;
+                    targetResults.push(targetResult)
+                  }
                 );
               });
             }
