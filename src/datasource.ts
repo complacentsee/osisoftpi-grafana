@@ -257,9 +257,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             frame.addField({ name: 'value', type: FieldType.number});        
 
             if(item.WebId && this.piwebapiurl){
-              let address = this.piwebapiurl.replace(/(^\w+:|^)\/\//, '');
-              //Note: This only works as a browser side, not as a server side
-              address= 'ws://' + address +  '/streams/' + item.WebId + '/channel?includeInitialValues=true'
+              var base_url = window.location.origin;
+              let address = base_url.replace(/(^\w+:|^)\/\//, '');
+              address= 'ws://' + address + this.url +  '/streams/' + item.WebId + '/channel?includeInitialValues=true'
               const connection = new WebSocket(address);
 
               connection.onerror = (error: any) => {
