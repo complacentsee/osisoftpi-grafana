@@ -125,6 +125,10 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, WebID s
 
 func (d *Datasource) createWebsocketConnection(WebID string) (*websocket.Conn, error) {
 	backend.Logger.Info("Streaming: Creating new websocket connection", "WebID", WebID)
+	if WebID == "" {
+		backend.Logger.Error("Streaming: WebID is empty")
+		return nil, errors.New("WebID is empty")
+	}
 
 	// Construct the URI for the websocket connection
 	uri := strings.Replace(d.settings.URL, "https://", "wss://", 1)
@@ -173,7 +177,7 @@ func (d *Datasource) sendStreamMessagesToSender(ctx context.Context, WebID strin
 			backend.Logger.Info("Streaming: sendStreamMessagesToSenders: Context done, checking for orphaned web sockets", "Path", Path)
 			d.removeSender(WebID, senders)
 			d.checkForOrphanedWebSockets(WebID)
-			// FIXME
+			// FIXME: this needs to be re-added. Removed for testing other bug fixes.
 			//delete(d.channelConstruct, Path)
 			errchan <- errors.New("context done")
 			return

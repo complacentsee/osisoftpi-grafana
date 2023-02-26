@@ -230,11 +230,10 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 
 // TODO: Code cleanup: handle this directly using slices of pointers.
 // TODO: Missing functionality: Add support for summary queries.
+// TODO: Missing functionality: Add support for replacing bad data.
 func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, SliceType reflect.Type, digitalState bool, summaryQuery bool) (*data.Frame, error) {
 	frame := data.NewFrame(frameName)
 
-	//FIXME
-	backend.Logger.Info("convertItemsToDataFrame", "SliceType", SliceType.String(), "digitalState", digitalState, "summaryQuery", summaryQuery)
 	var timestamps []time.Time
 	badValues := make([]int, 0)
 	var values any
