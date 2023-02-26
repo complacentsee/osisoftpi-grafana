@@ -7,10 +7,6 @@ export interface PIWebAPISelectableValue {
   expandable?: boolean;
 }
 
-export interface PIWebAPIAnnotationsQuery extends DataQuery {
-  target: string;
-}
-
 export interface PIWebAPIQuery extends DataQuery {
   target: string;
   elementPath: string;
@@ -20,6 +16,7 @@ export interface PIWebAPIQuery extends DataQuery {
   interpolate: any;
   recordedValues: any;
   digitalStates: any;
+  enableStreaming: any;
   webid: string;
   webids: string[];
   regex: any;
@@ -40,6 +37,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   interpolate: { enable: false },
   recordedValues: { enable: false },
   digitalStates: { enable: false },
+  enableStreaming: { enable: true },
   isPiPoint: false,
 };
 

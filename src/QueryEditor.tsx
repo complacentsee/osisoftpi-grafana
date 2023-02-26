@@ -269,7 +269,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     // set current value
     attributes[index] = item;
 
-    this.checkAttributeSegments(attributes, this.state.segments);
+    this.checkAttributeSegments(attributes, this.state.segments, false);
   };
   // segment change
   onSegmentChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
@@ -278,7 +278,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
     if (item.label === REMOVE_LABEL) {
       segments = slice(segments, 0, index);
-      this.checkAttributeSegments([], segments);
+      this.checkAttributeSegments([], segments, false);
       if (segments.length === 0) {
         segments.push({
           label: '',
@@ -312,7 +312,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     if (index < segments.length - 1) {
       segments = slice(segments, 0, index + 1);
     }
-    this.checkAttributeSegments([], segments);
+    this.checkAttributeSegments([], segments, false);
     // add new options
     if (!!item.value?.expandable) {
       segments.push({
@@ -566,32 +566,52 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    *
    * @memberOf PIWebAPIQueryEditor
    */
+  //FIXME: There is a bug here that removes PI Points from the list of attributes
   checkAttributeSegments(
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>,
-    segments: Array<SelectableValue<PIWebAPISelectableValue>>
+    segments: Array<SelectableValue<PIWebAPISelectableValue>>,
+    isPiPoint: boolean
   ): Promise<any> {
     const { datasource, data } = this.props;
     var ctrl = this;
     var findQuery = {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
       type: 'attributes',
+      webId: '',
+      pointName: '',
     };
+    //FIXME: This is an ugly hack
+    if (isPiPoint) {
+      findQuery.type= 'pipoint'
+      if(segments[0].value?.webId){
+        findQuery.webId = segments[0].value?.webId
+      }
+      if(attributes[0].value?.value){
+        findQuery.pointName = attributes[0].value!.value
+      }
+      };
+    
     return datasource
-      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: false }))
+      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: isPiPoint }))
       .then((attributesResponse: any) => {
         var validAttributes: any = {};
 
         each(attributesResponse, (attribute: any) => {
+          //FIXME: remove console.log
+          console.log("604: checkAttributeSegments: attribute: ", attribute)
           validAttributes[attribute.Path.substring(attribute.Path.indexOf('|') + 1)] = attribute.WebId;
         });
+        console.log("607: validAttributes: ", validAttributes)
 
-        var filteredAttributes = filter(attributes, (attrib: SelectableValue<PIWebAPISelectableValue>) => {
+        var filteredAttributes = filter(validAttributes, (attrib: SelectableValue<PIWebAPISelectableValue>) => {
           const changedValue = datasource.templateSrv.replace(attrib.value?.value);
           return validAttributes[changedValue] !== undefined;
         });
-
+        console.log("613: filteredAttributes: ", filteredAttributes)
         ctrl.availableAttributes = validAttributes;
-        this.attributeChangeValue(filteredAttributes);
+        if (filteredAttributes.length > 0) {
+          this.attributeChangeValue(filteredAttributes);
+        }
       })
       .catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query';
@@ -781,7 +801,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         isPiPoint,
       },
       () =>
-        this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
+        this.checkAttributeSegments(attributesArray, this.state.segments, isPiPoint).then(() => {
           if (cb) {
             cb();
           }
@@ -828,6 +848,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     } else if (isPiPoint && segmentsArray.length > 0) {
       this.piServer = segmentsArray;
     }
+
     this.updateArray(segmentsArray, attributesArray, summariesArray, isPiPoint, () => {
       this.onChange(query);
     });
@@ -864,7 +885,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         }
       }
 
-      console.log(query.elementPath);
+      //console.log(query.elementPath);
     } else {
       query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
       query.target =
@@ -875,7 +896,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           ';'
         );
 
-      console.log(query.elementPath);
+        //console.log(query.elementPath);
     }
 
     onChange(query);
@@ -918,7 +939,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       interpolate,
       query,
       rawQuery,
-      digitalStates,
+      enableStreaming,
       recordedValues,
       expression,
       isPiPoint,
@@ -1095,11 +1116,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
             />
           </InlineField>
-          <InlineField label="Digital States" labelWidth={LABEL_WIDTH}>
+          <InlineField label="Enable Streaming" labelWidth={LABEL_WIDTH}>
             <InlineSwitch
-              value={digitalStates.enable}
+              value={enableStreaming.enable}
               onChange={() =>
-                this.onChange({ ...metricsQuery, digitalStates: { ...digitalStates, enable: !digitalStates.enable } })
+                this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
               }
             />
           </InlineField>

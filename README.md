@@ -83,6 +83,16 @@ into your Grafana plugin directory.
 grafana-cli plugins install gridprotectionalliance-osisoftpi-datasource
 ```
 
+# Known Issues with this branch
+A user may need to override the max data points settings for a query to
+ensure that the entire time series is full. The grafana API can return 
+up to 5 points per interval while the dataframe buffer is set by the front 
+end to the max data points. There no method for the backend up update this. 
+
+The streaming data can cause the FIFO dataframe buffer to fill at a 
+faster rate than the query return. The dataframe buffer is sized 
+for the max data points setting. This can cause the time range to 
+depopulate from earlyest to newest as new points stream in. 
 
 # Trademarks
 
@@ -91,3 +101,4 @@ All company, product and service names used in this website are for identificati
 Use of these names, logos, and brands does not imply endorsement.
 
 OSIsoft, the OSIsoft logo and logotype, and PI Web API are all trademarks of OSIsoft, LLC.
+

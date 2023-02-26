@@ -4,9 +4,10 @@
   "type": "datasource",
   "id": "gridprotectionalliance-osisoftpi-datasource",
   "metrics": true,
-  "annotations": true,
-  "alerting": false,
+  "backend": true,
+  "alerting": true,
   "streaming": true,
+  "executable": "gpx_osipiwebapistreaming",
   "info": {
     "description": "Datasource plugin for OSIsoft PI Web API",
     "author": {
@@ -37,7 +38,7 @@
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=8.4.0",
+    "grafanaDependency": "^9.2.5",
     "plugins": []
   }
 }
